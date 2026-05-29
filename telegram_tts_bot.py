@@ -5,10 +5,27 @@ from gtts import gTTS
 import os
 import tempfile
 import subprocess
-from aiohttp import web
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-TOKEN = "8747790888:AAE8KNiy1Mwx5Av-Wxs8FQWoHSAQO4oaBtM"  # Вставить токен от @BotFather
+TOKEN = "8747790888:AAE8KNiy1Mwx5Av-Wxs8FQWoHSAQO4oaBtM"
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running')
+
+    def log_message(self, format, *args):
+        # Отключить логи HTTP запросов
+        pass
+
+def run_http_server():
+    port = int(os.environ.get('PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f"🌐 HTTP server started on port {port}")
+    server.serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -49,18 +66,6 @@ async def set_slow(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def set_normal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['slow'] = False
     await update.message.reply_text("✅ Скорость: Нормально")
-
-async def debug_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отладочный обработчик - показывает все входящие сообщения"""
-    print(f"\n🔍 DEBUG: Получен апдейт")
-    print(f"   Type: {type(update)}")
-    if update.message:
-        print(f"   Message ID: {update.message.message_id}")
-        print(f"   From: {update.message.from_user.first_name if update.message.from_user else 'Unknown'}")
-        print(f"   Text: {update.message.text[:100] if update.message.text else 'None'}")
-        print(f"   Caption: {update.message.caption[:100] if update.message.caption else 'None'}")
-        print(f"   Forward origin: {update.message.forward_origin if update.message.forward_origin else 'None'}")
-    print()
 
 async def text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отладка - показать что функция вызвана
@@ -146,23 +151,11 @@ async def text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(audio_file):
             os.remove(audio_file)
 
-async def health_check(request):
-    """Health check endpoint для Render.com"""
-    return web.Response(text="Bot is running")
+def main():
+    # Запустить HTTP сервер в отдельном потоке
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
 
-async def start_http_server():
-    """Запустить HTTP сервер для Render"""
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    port = int(os.environ.get('PORT', 8080))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"🌐 HTTP server started on port {port}")
-
-async def run_bot():
-    """Запустить Telegram бота"""
     app = Application.builder().token(TOKEN).build()
 
     # Обработчики команд
@@ -178,28 +171,7 @@ async def run_bot():
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION) & ~filters.COMMAND, text_to_speech))
 
     print("🤖 Бот запущен и ждёт сообщения...")
-
-    # Запустить бота с polling
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-
-    # Держать бота запущенным
-    try:
-        await asyncio.Event().wait()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-
-async def main():
-    """Главная функция - запускает HTTP сервер и бота параллельно"""
-    await asyncio.gather(
-        start_http_server(),
-        run_bot()
-    )
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
