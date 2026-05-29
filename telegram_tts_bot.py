@@ -7,6 +7,8 @@ import tempfile
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import time
+import sys
 
 TOKEN = "8747790888:AAE8KNiy1Mwx5Av-Wxs8FQWoHSAQO4oaBtM"
 
@@ -23,8 +25,9 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def run_http_server():
     port = int(os.environ.get('PORT', 8080))
+    print(f"🔧 Запуск HTTP сервера на порту {port}...", flush=True)
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    print(f"🌐 HTTP server started on port {port}")
+    print(f"🌐 HTTP сервер запущен и слушает 0.0.0.0:{port}", flush=True)
     server.serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,10 +155,22 @@ async def text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(audio_file)
 
 def main():
+    print("=" * 50, flush=True)
+    print(f"🚀 Старт приложения", flush=True)
+    print(f"📍 PORT env var: {os.environ.get('PORT', 'не установлена')}", flush=True)
+    print("=" * 50, flush=True)
+
     # Запустить HTTP сервер в отдельном потоке
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread = threading.Thread(target=run_http_server)
+    http_thread.daemon = True
     http_thread.start()
 
+    # Дать время HTTP серверу запуститься
+    print("⏳ Ожидание запуска HTTP сервера...", flush=True)
+    time.sleep(2)
+    print("✅ HTTP сервер должен быть готов", flush=True)
+
+    print("🤖 Инициализация Telegram бота...", flush=True)
     app = Application.builder().token(TOKEN).build()
 
     # Обработчики команд
