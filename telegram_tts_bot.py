@@ -5,6 +5,8 @@ from gtts import gTTS
 import os
 import tempfile
 import subprocess
+from aiohttp import web
+import threading
 
 TOKEN = "8747790888:AAE8KNiy1Mwx5Av-Wxs8FQWoHSAQO4oaBtM"  # Вставить токен от @BotFather
 
@@ -144,7 +146,24 @@ async def text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(audio_file):
             os.remove(audio_file)
 
+async def health_check(request):
+    """Health check endpoint для Render.com"""
+    return web.Response(text="Bot is running")
+
+def run_http_server():
+    """Запустить простой HTTP сервер для Render health check"""
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    port = int(os.environ.get('PORT', 8080))
+    web.run_app(app, host='0.0.0.0', port=port)
+
 def main():
+    # Запустить HTTP сервер в отдельном потоке (для Render.com)
+    if os.environ.get('RENDER'):
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+        print(f"🌐 HTTP server started on port {os.environ.get('PORT', 8080)}")
+
     app = Application.builder().token(TOKEN).build()
 
     # Обработчики команд
