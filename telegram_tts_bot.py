@@ -150,20 +150,19 @@ async def health_check(request):
     """Health check endpoint для Render.com"""
     return web.Response(text="Bot is running")
 
-def run_http_server():
-    """Запустить простой HTTP сервер для Render health check"""
+async def start_http_server():
+    """Запустить HTTP сервер для Render"""
     app = web.Application()
     app.router.add_get('/', health_check)
     port = int(os.environ.get('PORT', 8080))
-    web.run_app(app, host='0.0.0.0', port=port)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"🌐 HTTP server started on port {port}")
 
-def main():
-    # Запустить HTTP сервер в отдельном потоке (для Render.com)
-    if os.environ.get('RENDER'):
-        http_thread = threading.Thread(target=run_http_server, daemon=True)
-        http_thread.start()
-        print(f"🌐 HTTP server started on port {os.environ.get('PORT', 8080)}")
-
+async def run_bot():
+    """Запустить Telegram бота"""
     app = Application.builder().token(TOKEN).build()
 
     # Обработчики команд
@@ -179,7 +178,28 @@ def main():
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION) & ~filters.COMMAND, text_to_speech))
 
     print("🤖 Бот запущен и ждёт сообщения...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    # Запустить бота с polling
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+
+    # Держать бота запущенным
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+
+async def main():
+    """Главная функция - запускает HTTP сервер и бота параллельно"""
+    await asyncio.gather(
+        start_http_server(),
+        run_bot()
+    )
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
